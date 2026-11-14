@@ -24,8 +24,10 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o-mini"
     WHISPER_MODEL: str = "whisper-1"
     
-    # YouTube API
+    # YouTube API & Auto Download
     YOUTUBE_API_KEY: str = ""
+    ENABLE_YOUTUBE_DOWNLOAD: bool = True
+    YOUTUBE_DOWNLOAD_MAX_RESOLUTION: int = 1080
     
     # Storage & Uploads
     UPLOAD_DIR: str = str(BASE_DIR / "data" / "uploads")

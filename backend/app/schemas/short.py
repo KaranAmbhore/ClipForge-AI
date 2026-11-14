@@ -47,8 +47,8 @@ class ShortResponse(BaseModel):
 class RegenerateRequest(BaseModel):
     caption_style: Optional[str] = "modern"
     aspect_ratio: Optional[str] = "9:16"
-    font_size: Optional[int] = 24
-    font_color: Optional[str] = "#FFFFFF"
-    highlight_color: Optional[str] = "#FBBF24"
-    caption_position: Optional[str] = "bottom"
+    font_size: Optional[int] = 38
+    font_color: Optional[str] = "#FBBF24"
+    highlight_color: Optional[str] = "#FFFFFF"
+    caption_position: Optional[str] = "center"
     burn_subtitles: bool = True

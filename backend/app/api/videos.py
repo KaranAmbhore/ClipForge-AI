@@ -1,4 +1,6 @@
 import os
+import asyncio
+import logging
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -7,12 +9,20 @@ from app.database import get_db
 from app.models.user import User
 from app.models.project import Project
 from app.models.video import Video
-from app.schemas.video import VideoValidateUrlRequest, VideoValidateUrlResponse, VideoUploadResponse, VideoResponse
+from app.schemas.video import (
+    VideoValidateUrlRequest,
+    VideoValidateUrlResponse,
+    VideoUploadResponse,
+    VideoResponse,
+    VideoDownloadYoutubeRequest
+)
 from app.api.auth import get_current_user
 from app.services.youtube_service import YouTubeService
 from app.services.storage_service import StorageService
 from app.utils.ffmpeg_utils import get_video_info
-from app.utils.validators import validate_video_extension
+from app.utils.validators import validate_video_extension, is_valid_youtube_url
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/videos", tags=["Videos"])
 
@@ -20,8 +30,6 @@ router = APIRouter(prefix="/videos", tags=["Videos"])
 async def validate_youtube_url(payload: VideoValidateUrlRequest):
     """
     Validates a YouTube URL and returns video metadata (title, author, thumbnail).
-    Adheres strictly to YouTube Terms of Service: explicitly guides the user to provide
-    the authorized video file for conversion.
     """
     data = await YouTubeService.get_video_metadata(payload.url)
     if not data.get("is_valid"):
@@ -36,8 +44,77 @@ async def validate_youtube_url(payload: VideoValidateUrlRequest):
         author=data.get("author"),
         duration=data.get("duration"),
         thumbnail_url=data.get("thumbnail_url"),
-        can_auto_download=False,
+        can_auto_download=data.get("can_auto_download", True),
         message=data.get("message")
+    )
+
+@router.post("/download-youtube", response_model=VideoUploadResponse)
+async def download_youtube(
+    payload: VideoDownloadYoutubeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Downloads YouTube video directly into local storage using yt-dlp, and initializes the project.
+    """
+    url = payload.url.strip()
+    if not is_valid_youtube_url(url):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide a valid YouTube URL."
+        )
+
+    try:
+        # Run yt-dlp download in thread pool to prevent blocking FastAPI event loop
+        meta = await asyncio.to_thread(YouTubeService.download_video, url)
+    except Exception as e:
+        logger.error(f"Error downloading YouTube video {url}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to auto-download YouTube video: {str(e)}"
+        )
+
+    file_path = meta["file_path"]
+    video_info = get_video_info(file_path)
+    dur = video_info.get("duration") or meta.get("duration", 60.0)
+    title = payload.title or meta.get("title") or "YouTube Video"
+
+    # Create Project
+    project = Project(
+        user_id=current_user.id,
+        original_video_title=title,
+        original_video_url=url,
+        source_type="youtube",
+        video_duration=dur,
+        processing_status="draft"
+    )
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+
+    # Create Video record
+    video = Video(
+        project_id=project.id,
+        original_file_url=meta["media_url"],
+        file_path=file_path,
+        file_size=meta["file_size"],
+        format=video_info.get("format", meta["format"]),
+        duration=dur,
+        width=video_info.get("width", 1920),
+        height=video_info.get("height", 1080)
+    )
+    db.add(video)
+    db.commit()
+    db.refresh(video)
+
+    return VideoUploadResponse(
+        video_id=video.id,
+        project_id=project.id,
+        filename=meta["filename"],
+        file_size=meta["file_size"],
+        duration=dur,
+        format=video.format,
+        video_url=meta["media_url"]
     )
 
 @router.post("/upload", response_model=VideoUploadResponse)

@@ -37,26 +37,44 @@ class TranscriptionService:
                 client = OpenAI(api_key=settings.OPENAI_API_KEY)
                 
                 with open(audio_path, "rb") as audio_file:
-                    logger.info("Calling OpenAI Whisper API for speech-to-text...")
+                    logger.info("Calling OpenAI Whisper API for speech-to-text with word-level timestamps...")
                     response = client.audio.transcriptions.create(
                         model=settings.WHISPER_MODEL,
                         file=audio_file,
                         response_format="verbose_json",
-                        timestamp_granularities=["segment"]
+                        timestamp_granularities=["segment", "word"]
                     )
                     
+                    # Extract words map
+                    all_words = []
+                    if hasattr(response, "words") and response.words:
+                        for w in response.words:
+                            w_text = (w.get("word", "") if isinstance(w, dict) else getattr(w, "word", "")).strip()
+                            if w_text:
+                                all_words.append({
+                                    "word": w_text,
+                                    "start": round(float(w.get("start", 0.0) if isinstance(w, dict) else getattr(w, "start", 0.0)), 2),
+                                    "end": round(float(w.get("end", 0.0) if isinstance(w, dict) else getattr(w, "end", 0.0)), 2),
+                                })
+
                     segments = []
                     if hasattr(response, "segments") and response.segments:
                         for s in response.segments:
                             text = (s.get("text", "") if isinstance(s, dict) else getattr(s, "text", "")).strip()
+                            s_start = round(float(s.get("start", 0.0) if isinstance(s, dict) else getattr(s, "start", 0.0)), 2)
+                            s_end = round(float(s.get("end", 0.0) if isinstance(s, dict) else getattr(s, "end", 0.0)), 2)
+                            
+                            # Filter words that belong to this segment
+                            seg_words = [w for w in all_words if w["start"] >= s_start - 0.1 and w["end"] <= s_end + 0.1]
                             if text:
                                 segments.append({
-                                    "start": round(float(s.get("start", 0.0) if isinstance(s, dict) else getattr(s, "start", 0.0)), 2),
-                                    "end": round(float(s.get("end", 0.0) if isinstance(s, dict) else getattr(s, "end", 0.0)), 2),
-                                    "text": text
+                                    "start": s_start,
+                                    "end": s_end,
+                                    "text": text,
+                                    "words": seg_words
                                 })
                         if segments:
-                            logger.info(f"OpenAI Whisper returned {len(segments)} segments.")
+                            logger.info(f"OpenAI Whisper returned {len(segments)} segments with word timestamps.")
                             return segments
             except Exception as e:
                 logger.warning(f"OpenAI Whisper API failed, trying local whisper: {e}")
@@ -65,12 +83,13 @@ class TranscriptionService:
         local_model = get_local_whisper_model()
         if local_model and os.path.exists(audio_path):
             try:
-                logger.info(f"Extracting real speech from {audio_path} using local Whisper...")
+                logger.info(f"Extracting real speech from {audio_path} using local Whisper with word-level timestamps...")
                 lang_param = language if language and language != "auto" else None
                 segments_iter, info = local_model.transcribe(
                     audio_path,
                     language=lang_param,
                     vad_filter=True, # Voice Activity Detection filter to skip dead silence
+                    word_timestamps=True,
                     beam_size=1
                 )
                 
@@ -78,14 +97,25 @@ class TranscriptionService:
                 for s in segments_iter:
                     text = s.text.strip()
                     if text:
+                        word_list = []
+                        if getattr(s, "words", None):
+                            for w in s.words:
+                                w_clean = w.word.strip()
+                                if w_clean:
+                                    word_list.append({
+                                        "word": w_clean,
+                                        "start": round(float(w.start), 2),
+                                        "end": round(float(w.end), 2)
+                                    })
                         real_segments.append({
                             "start": round(float(s.start), 2),
                             "end": round(float(s.end), 2),
-                            "text": text
+                            "text": text,
+                            "words": word_list
                         })
                 
                 if real_segments:
-                    logger.info(f"Local Whisper successfully extracted {len(real_segments)} real speech segments! (Lang: {info.language})")
+                    logger.info(f"Local Whisper successfully extracted {len(real_segments)} real speech segments with word timestamps! (Lang: {info.language})")
                     return real_segments
                 else:
                     logger.info("Local Whisper detected no spoken dialogue in the audio track.")
@@ -104,10 +134,23 @@ class TranscriptionService:
         idx = 1
         while t < duration:
             end_t = min(duration, t + step)
+            text = f"Highlight Section #{idx}"
+            words_tokens = text.split()
+            w_step = (end_t - t) / max(1, len(words_tokens))
+            synth_words = []
+            curr_wt = t
+            for wt in words_tokens:
+                synth_words.append({
+                    "word": wt,
+                    "start": round(curr_wt, 2),
+                    "end": round(curr_wt + w_step, 2)
+                })
+                curr_wt += w_step
             segments.append({
                 "start": round(t, 2),
                 "end": round(end_t, 2),
-                "text": f"Highlight Section #{idx}"
+                "text": text,
+                "words": synth_words
             })
             t = end_t
             idx += 1

@@ -22,10 +22,10 @@ class Short(Base):
     transcript = Column(Text, nullable=True)  # JSON-encoded array of timestamped segments
     caption_style = Column(String(50), default="modern")  # modern, minimal, bold, karaoke
     aspect_ratio = Column(String(20), default="9:16")  # 9:16, 1:1, 16:9
-    font_size = Column(Integer, default=24)
-    font_color = Column(String(20), default="#FFFFFF")
-    highlight_color = Column(String(20), default="#FBBF24")  # Gold/Yellow
-    caption_position = Column(String(20), default="bottom")  # top, center, bottom
+    font_size = Column(Integer, default=38)
+    font_color = Column(String(20), default="#FBBF24")  # Gold/Yellow text
+    highlight_color = Column(String(20), default="#FFFFFF")  # White active word highlight
+    caption_position = Column(String(20), default="center")  # top, center, bottom
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

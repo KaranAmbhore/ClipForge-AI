@@ -44,8 +44,8 @@ def test_validate_youtube_url():
     assert res.status_code == 200
     data = res.json()
     assert data["is_valid"] is True
-    assert data["can_auto_download"] is False
-    assert "TOS" in data["message"] or "YouTube" in data["message"]
+    assert data["can_auto_download"] is True
+    assert "YouTube" in data["message"] or "Auto-download" in data["message"]
 
     # Invalid URL
     bad_res = client.post("/api/videos/validate-url", json={
@@ -53,6 +53,13 @@ def test_validate_youtube_url():
     })
     assert bad_res.status_code == 200
     assert bad_res.json()["is_valid"] is False
+
+def test_download_youtube_invalid_url():
+    # Test invalid url rejection
+    res = client.post("/api/videos/download-youtube", json={
+        "url": "https://invalid-video-site.com/video"
+    })
+    assert res.status_code == 400
 
 def test_projects_crud():
     # Create project
@@ -79,3 +86,37 @@ def test_projects_crud():
     # Delete project
     del_res = client.delete(f"/api/projects/{proj_id}")
     assert del_res.status_code == 204
+
+def test_dynamic_karaoke_captions(tmp_path):
+    from app.services.caption_service import CaptionService
+    import os
+
+    segments = [
+        {
+            "start": 0.0,
+            "end": 2.5,
+            "text": "Everything you are watching",
+            "words": [
+                {"word": "Everything", "start": 0.0, "end": 0.8},
+                {"word": "you", "start": 0.8, "end": 1.4},
+                {"word": "are", "start": 1.4, "end": 1.8},
+                {"word": "watching", "start": 1.8, "end": 2.5}
+            ]
+        }
+    ]
+
+    ass_path = str(tmp_path / "dynamic_test.ass")
+    CaptionService.generate_ass_file(
+        segments=segments,
+        output_path=ass_path,
+        style="karaoke",
+        highlight_color="#22C55E"
+    )
+
+    assert os.path.exists(ass_path)
+    with open(ass_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    assert "BeastStyle" in content
+    assert r"\fscx112\fscy112" in content
+    assert "Dialogue:" in content

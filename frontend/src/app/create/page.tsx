@@ -14,6 +14,7 @@ import {
   Type,
   Crop,
   ShieldAlert,
+  Download,
 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { api, VideoMetadata, UploadResponse } from "@/lib/api";
@@ -30,7 +31,9 @@ function CreateShortsContent() {
   // YouTube URL state
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [isValidatingUrl, setIsValidatingUrl] = useState(false);
+  const [isDownloadingYt, setIsDownloadingYt] = useState(false);
   const [ytMetadata, setYtMetadata] = useState<VideoMetadata | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   // Video File Upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -65,6 +68,7 @@ function CreateShortsContent() {
     if (!urlToValidate.trim()) return;
     setIsValidatingUrl(true);
     setYtMetadata(null);
+    setDownloadError(null);
     try {
       const data = await api.validateYoutubeUrl(urlToValidate);
       setYtMetadata(data);
@@ -72,6 +76,23 @@ function CreateShortsContent() {
       console.error("Validation error", err);
     } finally {
       setIsValidatingUrl(false);
+    }
+  };
+
+  const handleDownloadYoutube = async () => {
+    const targetUrl = youtubeUrl.trim();
+    if (!targetUrl) return;
+    setIsDownloadingYt(true);
+    setDownloadError(null);
+    setUploadError(null);
+    try {
+      const res = await api.downloadYoutubeVideo(targetUrl, ytMetadata?.title);
+      setUploadedVideo(res);
+    } catch (err: any) {
+      console.error("Auto-download error", err);
+      setDownloadError(err.message || "Failed to download YouTube video. Please try again or upload manually.");
+    } finally {
+      setIsDownloadingYt(false);
     }
   };
 
@@ -223,148 +244,218 @@ function CreateShortsContent() {
             </div>
           </div>
 
-          {/* TAB 1: YOUTUBE URL */}
-          {activeTab === "url" && (
-            <div className="space-y-4">
-              <form onSubmit={handleUrlSubmit} className="flex gap-2">
-                <div className="relative flex-1">
-                  <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" />
-                  <input
-                    type="text"
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    value={youtubeUrl}
-                    onChange={(e) => setYoutubeUrl(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-background border border-border text-sm text-white placeholder-muted focus:outline-none focus:border-primary"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isValidatingUrl || !youtubeUrl}
-                  className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold flex items-center gap-2 disabled:opacity-50"
-                >
-                  {isValidatingUrl ? "Verifying..." : "Retrieve Metadata"}
-                </button>
-              </form>
+          {/* SUCCESS STATE: VIDEO READY (FOR BOTH TABS) */}
+          {uploadedVideo ? (
+            <div className="border border-emerald-500/40 bg-emerald-500/5 rounded-2xl p-6 text-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500 flex items-center justify-center mx-auto text-emerald-400 shadow-sm shadow-emerald-500/20">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <span className="inline-block text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 mb-1">
+                  Ready for AI Processing
+                </span>
+                <h4 className="text-base font-bold text-white">{uploadedVideo.filename}</h4>
+                <p className="text-xs text-muted">
+                  Duration: <span className="text-zinc-200 font-medium">{formatDuration(uploadedVideo.duration)}</span> • 
+                  Size: <span className="text-zinc-200 font-medium">{formatFileSize(uploadedVideo.file_size)}</span> • 
+                  Format: <span className="text-zinc-200 font-medium">{uploadedVideo.format.toUpperCase()}</span>
+                </p>
+              </div>
 
-              {/* YouTube Metadata Preview Card */}
-              {ytMetadata && (
-                <div className="p-4 rounded-2xl bg-background/60 border border-border space-y-4">
-                  <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                    <img
-                      src={ytMetadata.thumbnail_url}
-                      alt="Thumbnail"
-                      className="w-40 aspect-video rounded-xl object-cover border border-border"
-                    />
-                    <div className="space-y-1">
-                      <h4 className="text-sm font-bold text-white leading-snug">{ytMetadata.title}</h4>
-                      <p className="text-xs text-muted">Channel: {ytMetadata.author}</p>
-                      <p className="text-xs text-zinc-400 flex items-center gap-1 mt-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>Approx. duration: {formatDuration(ytMetadata.duration || 120)}</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* YouTube TOS Notification & Authorized Source guidance */}
-                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300/90 space-y-2">
-                    <div className="flex items-center gap-2 font-semibold">
-                      <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span>YouTube Terms of Service Compliance</span>
-                    </div>
-                    <p className="leading-relaxed text-[11px] text-zinc-300">
-                      YouTube restricts direct unauthorized third-party file scraping. To generate video shorts in full
-                      compliance with copyright laws, please provide or upload your authorized source recording below.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 2 / DROPZONE: FILE UPLOAD */}
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
-              uploadedVideo
-                ? "border-emerald-500/50 bg-emerald-500/5"
-                : "border-card-border hover:border-primary/50 bg-background/30"
-            }`}
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="video/mp4,video/webm,video/quicktime,video/mkv"
-              className="hidden"
-            />
-
-            {uploadedVideo ? (
-              <div className="space-y-3">
-                <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500 flex items-center justify-center mx-auto text-emerald-400">
-                  <CheckCircle2 className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="text-sm font-bold text-white">{uploadedVideo.filename}</h4>
-                  <p className="text-xs text-muted">
-                    {formatDuration(uploadedVideo.duration)} • {formatFileSize(uploadedVideo.file_size)} •{" "}
-                    {uploadedVideo.format.toUpperCase()}
-                  </p>
-                </div>
+              <div className="pt-2 flex flex-wrap items-center justify-center gap-4">
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-xs text-secondary hover:underline"
+                  onClick={() => {
+                    setUploadedVideo(null);
+                    setSelectedFile(null);
+                  }}
+                  className="text-xs text-zinc-400 hover:text-white underline transition-colors"
                 >
-                  Change Video File
+                  Choose or Download a Different Video
                 </button>
               </div>
-            ) : isUploading ? (
-              <div className="space-y-3 max-w-sm mx-auto">
-                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-xs font-semibold text-white">Uploading Video...</p>
-                <div className="w-full bg-card rounded-full h-2 overflow-hidden border border-border">
-                  <div
-                    className="bg-primary h-full transition-all duration-300"
-                    style={{ width: `${uploadProgress}%` }}
+            </div>
+          ) : (
+            <>
+              {/* TAB 1: YOUTUBE URL */}
+              {activeTab === "url" && (
+                <div className="space-y-4">
+                  <form onSubmit={handleUrlSubmit} className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        value={youtubeUrl}
+                        onChange={(e) => setYoutubeUrl(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-background border border-border text-sm text-white placeholder-muted focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={isValidatingUrl || isDownloadingYt || !youtubeUrl}
+                        className="px-4 py-2.5 rounded-xl bg-card-border hover:bg-zinc-700 text-white text-xs font-semibold flex items-center gap-2 disabled:opacity-50 transition-colors"
+                      >
+                        {isValidatingUrl ? "Verifying..." : "Retrieve Info"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadYoutube}
+                        disabled={isValidatingUrl || isDownloadingYt || !youtubeUrl}
+                        className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold flex items-center gap-2 disabled:opacity-50 transition-colors shadow-sm shadow-primary/30"
+                      >
+                        {isDownloadingYt ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            <span>Downloading...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4" />
+                            <span>Auto-Download</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+
+                  {downloadError && (
+                    <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300">
+                      {downloadError}
+                    </div>
+                  )}
+
+                  {/* YouTube Metadata Preview Card */}
+                  {ytMetadata && (
+                    <div className="p-4 sm:p-5 rounded-2xl bg-background/60 border border-border space-y-4">
+                      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                          <img
+                            src={ytMetadata.thumbnail_url}
+                            alt="Thumbnail"
+                            className="w-40 aspect-video rounded-xl object-cover border border-border"
+                          />
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-bold text-white leading-snug">{ytMetadata.title}</h4>
+                            <p className="text-xs text-muted">Channel: {ytMetadata.author}</p>
+                            <p className="text-xs text-zinc-400 flex items-center gap-1 mt-1">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>Approx. duration: {formatDuration(ytMetadata.duration || 120)}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleDownloadYoutube}
+                          disabled={isDownloadingYt}
+                          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-primary/20 shrink-0 disabled:opacity-50 transition-all"
+                        >
+                          {isDownloadingYt ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              <span>Downloading via yt-dlp...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-4 h-4" />
+                              <span>Download & Use This Video</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Local Auto-Download Notice */}
+                      <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300/90 space-y-1">
+                        <div className="flex items-center gap-2 font-semibold">
+                          <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>Local Auto-Download Ready</span>
+                        </div>
+                        <p className="leading-relaxed text-[11px] text-zinc-300">
+                          Running locally. Click <strong>Download & Use This Video</strong> to have your backend automatically fetch the full 1080p MP4 recording using <code className="bg-zinc-800 text-emerald-300 px-1 py-0.5 rounded">yt-dlp</code> directly into your local workspace.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Downloading in Progress State */}
+                  {isDownloadingYt && !ytMetadata && (
+                    <div className="p-8 rounded-2xl bg-primary/5 border border-primary/20 text-center space-y-3">
+                      <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                      <h4 className="text-sm font-bold text-white">Downloading Video via yt-dlp...</h4>
+                      <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+                        Fetching high-quality streams and merging audio & video tracks into your local workspace.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 2 / DROPZONE: FILE UPLOAD */}
+              {activeTab === "upload" && (
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleDrop}
+                  className="border-2 border-dashed rounded-2xl p-8 text-center transition-all border-card-border hover:border-primary/50 bg-background/30"
+                >
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="video/mp4,video/webm,video/quicktime,video/mkv"
+                    className="hidden"
                   />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary-light mx-auto">
-                  <Upload className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-white">
-                    Drag and drop your video here, or{" "}
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="text-secondary hover:underline"
-                    >
-                      browse files
-                    </button>
-                  </p>
-                  <p className="text-xs text-muted">Supports MP4, MOV, and WebM (up to 500 MB)</p>
-                </div>
 
-                {/* Instant Dev Mode Helper */}
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={handleLoadSampleVideo}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card-border hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition-colors"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Load 20s Sample Video (Instant Demo)</span>
-                  </button>
-                </div>
-              </div>
-            )}
+                  {isUploading ? (
+                    <div className="space-y-3 max-w-sm mx-auto">
+                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                      <p className="text-xs font-semibold text-white">Uploading Video...</p>
+                      <div className="w-full bg-card rounded-full h-2 overflow-hidden border border-border">
+                        <div
+                          className="bg-primary h-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary-light mx-auto">
+                        <Upload className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-white">
+                          Drag and drop your video here, or{" "}
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="text-secondary hover:underline"
+                          >
+                            browse files
+                          </button>
+                        </p>
+                        <p className="text-xs text-muted">Supports MP4, MOV, and WebM (up to 500 MB)</p>
+                      </div>
 
-            {uploadError && <p className="text-xs text-rose-400 mt-3 font-medium">{uploadError}</p>}
-          </div>
+                      {/* Instant Dev Mode Helper */}
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={handleLoadSampleVideo}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card-border hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition-colors"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Load 20s Sample Video (Instant Demo)</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {uploadError && <p className="text-xs text-rose-400 mt-3 font-medium">{uploadError}</p>}
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* STEP 2: VIDEO PROCESSING SETTINGS */}

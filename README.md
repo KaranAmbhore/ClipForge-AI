@@ -24,10 +24,9 @@
    - Inline transcript editor to customize words, spellings, and timestamps.
    - Real-time FFmpeg re-rendering and instant export.
 
-5. **100% YouTube TOS & Copyright Compliant**:
-   - Respects YouTube platform integrity.
-   - Uses the official **YouTube Data API** and **oEmbed** for metadata retrieval.
-   - Does not bypass DRM or scrape restricted platform media; guides users to supply authorized copies of their own original content.
+5. **Flexible Ingestion & Local Auto-Download Engine**:
+   - **Local Mode (Default)**: Integrated `yt-dlp` pipeline allows 1-click automatic downloading directly from YouTube links for personal, offline testing.
+   - **Compliant Public SaaS Mode**: Configurable via `ENABLE_YOUTUBE_DOWNLOAD=false` to enforce metadata-only validation and direct authorized file uploads.
 
 ---
 
@@ -63,11 +62,13 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Run backend automated tests
-pytest tests/
+# Run backend automated unit tests
+python -m pytest tests/test_api.py
 
 # Start FastAPI backend server
-uvicorn app.main:app --reload --port 8000
+python -m uvicorn app.main:app --reload --port 8000
+# Or alternatively:
+# python run.py
 ```
 Backend will be available at: **http://localhost:8000**  
 Interactive Swagger Docs: **http://localhost:8000/docs**

@@ -71,10 +71,10 @@ export default function VideoEditorPage() {
         setEndTime(data.end_time);
         setAspectRatio(data.aspect_ratio || "9:16");
         setCaptionStyle(data.caption_style || "modern");
-        setFontSize(data.font_size || 24);
-        setFontColor(data.font_color || "#FFFFFF");
-        setHighlightColor(data.highlight_color || "#FBBF24");
-        setCaptionPosition(data.caption_position || "bottom");
+        setFontSize(data.font_size || 38);
+        setFontColor(data.font_color || "#FBBF24");
+        setHighlightColor(data.highlight_color || "#FFFFFF");
+        setCaptionPosition(data.caption_position || "center");
 
         if (data.transcript) {
           try {
@@ -415,7 +415,7 @@ export default function VideoEditorPage() {
             <input
               type="range"
               min={16}
-              max={40}
+              max={60}
               value={fontSize}
               onChange={(e) => setFontSize(parseInt(e.target.value))}
               className="w-full accent-primary cursor-pointer"

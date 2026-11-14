@@ -5,13 +5,17 @@ from typing import Optional
 class VideoValidateUrlRequest(BaseModel):
     url: str
 
+class VideoDownloadYoutubeRequest(BaseModel):
+    url: str
+    title: Optional[str] = None
+
 class VideoValidateUrlResponse(BaseModel):
     is_valid: bool
     title: Optional[str] = None
     author: Optional[str] = None
     duration: Optional[float] = None
     thumbnail_url: Optional[str] = None
-    can_auto_download: bool = False
+    can_auto_download: bool = True
     message: str
 
 class VideoUploadResponse(BaseModel):

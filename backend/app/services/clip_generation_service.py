@@ -19,10 +19,10 @@ class ClipGenerationService:
         transcript_slice: Optional[List[Dict[str, Any]]] = None,
         include_subtitles: bool = True,
         caption_style: str = "modern",
-        font_size: int = 24,
-        font_color: str = "#FFFFFF",
-        highlight_color: str = "#FBBF24",
-        caption_position: str = "bottom"
+        font_size: int = 38,
+        font_color: str = "#FBBF24",
+        highlight_color: str = "#FFFFFF",
+        caption_position: str = "center"
     ) -> Dict[str, Any]:
         """
         Extracts, reframes, burns captions (if requested), and generates thumbnail for a short.
@@ -44,10 +44,22 @@ class ClipGenerationService:
                 st = max(0.0, seg_start - start_time)
                 et = min(end_time - start_time, seg_end - start_time)
                 if et > st:
+                    shifted_words = []
+                    for w in seg.get("words", []):
+                        w_st = float(w.get("start", 0.0))
+                        w_et = float(w.get("end", w_st + 0.3))
+                        if w_et <= start_time or w_st >= end_time:
+                            continue
+                        shifted_words.append({
+                            "word": w.get("word", ""),
+                            "start": max(0.0, round(w_st - start_time, 2)),
+                            "end": min(end_time - start_time, round(w_et - start_time, 2))
+                        })
                     shifted_segments.append({
                         "start": round(st, 2),
                         "end": round(et, 2),
-                        "text": seg.get("text", "")
+                        "text": seg.get("text", ""),
+                        "words": shifted_words
                     })
 
             ass_file_path = os.path.splitext(video_out)[0] + ".ass"

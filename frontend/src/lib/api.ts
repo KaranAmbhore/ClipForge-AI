@@ -136,6 +136,22 @@ export const api = {
     return res.json();
   },
 
+  async downloadYoutubeVideo(url: string, title?: string): Promise<UploadResponse> {
+    const res = await fetch(`${API_BASE}/videos/download-youtube`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({ url, title }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "YouTube auto-download failed" }));
+      throw new Error(err.detail || "YouTube auto-download failed");
+    }
+    return res.json();
+  },
+
   async uploadVideo(file: File, title?: string, source_type = "upload", youtube_url?: string): Promise<UploadResponse> {
     const formData = new FormData();
     formData.append("file", file);
